@@ -69,31 +69,32 @@ if csv_file and zip_file:
             file_ext, mime = "pdf", "application/pdf"
 
         else: 
-            # --- PowerPoint 2010 徹底対策版 ---
-            prs = Presentation() # スライドサイズ設定を削除（デフォルトの4:3を使用）
+            # --- PowerPoint 2010 互換性重視の極限シンプル版 ---
+            prs = Presentation()
+            # 2010年版が最も得意とする標準サイズ
+            prs.slide_width = Inches(10)
+            prs.slide_height = Inches(7.5)
             
             for word in words:
-                # 表面：文字
-                # レイアウト0（タイトルスライド）が最も安定します
-                slide = prs.slides.add_slide(prs.slide_layouts[0])
-                # 標準のタイトル枠を使用
-                title = slide.shapes.title
-                title.text = word
+                # 表面：文字 (完全に空のスライドを使用)
+                slide = prs.slides.add_slide(prs.slide_layouts[6])
+                # 手動でテキストボックスを真ん中に配置
+                left = Inches(0.5)
+                top = Inches(2.5)
+                width = Inches(9)
+                height = Inches(2.5)
+                txBox = slide.shapes.add_textbox(left, top, width, height)
+                tf = txBox.text_frame
+                p = tf.paragraphs[0]
+                p.text = word
+                p.alignment = PP_ALIGN.CENTER
                 # フォント設定
-                for paragraph in title.text_frame.paragraphs:
-                    paragraph.alignment = PP_ALIGN.CENTER
-                    for run in paragraph.runs:
-                        run.font.size = Pt(80)
-                        run.font.name = pptx_font_name
-                        run.font.bold = True
-                # 副題（Subtitle）があれば削除してエラーを回避
-                for shape in slide.placeholders:
-                    if shape.placeholder_format.idx == 1:
-                        sp = shape.element
-                        sp.getparent().remove(sp)
+                p.font.size = Pt(100)
+                p.font.name = pptx_font_name
+                p.font.bold = True
                 
                 # 裏面：画像
-                slide = prs.slides.add_slide(prs.slide_layouts[6]) # 空白スライド
+                slide = prs.slides.add_slide(prs.slide_layouts[6])
                 found = None
                 for ext in ['.jpg', '.jpeg', '.png', '.JPG', '.PNG']:
                     target = f"{word}{ext}"
@@ -102,12 +103,12 @@ if csv_file and zip_file:
                             found = f; break
                     if found: break
                 if found:
-                    img_data = io.BytesIO(z.read(found))
-                    # サイズ指定を「スライドいっぱい」ではなく、少し余裕を持たせる
-                    slide.shapes.add_picture(img_data, 0, 0, width=prs.slide_width)
+                    img_stream = io.BytesIO(z.read(found))
+                    # スライド全体に画像を配置
+                    slide.shapes.add_picture(img_stream, 0, 0, width=prs.slide_width, height=prs.slide_height)
             
             prs.save(buf)
             file_ext, mime = "pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"
 
         st.success(f"{output_type} が完成しました！")
-        st.download_button(label="保存して2010で試す", data=buf.getvalue(), file_name=f"English_Cards_2010.{file_ext}", mime=mime)
+        st.download_button(label="保存して再度試す", data=buf.getvalue(), file_name=f"English_Cards_Fixed.{file_ext}", mime=mime)
