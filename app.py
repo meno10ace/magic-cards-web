@@ -12,15 +12,12 @@ from PIL import Image
 st.title("🎨 手作り英単語カードメーカー")
 
 # --- フォントの設定 ---
-# GitHubにアップロードするファイル名と一致させています
 font_path = "comicbd.ttf" 
 
 if os.path.exists(font_path):
-    # フォントを 'ComicSans' という名前で登録
     pdfmetrics.registerFont(TTFont('ComicSans', font_path))
     target_font = 'ComicSans'
 else:
-    # ファイルが見つからない場合は標準のHelveticaを使用
     target_font = 'Helvetica-Bold'
     st.warning(f"⚠️ {font_path} が見つかりません。標準フォントで作成します。")
 
@@ -40,12 +37,21 @@ if csv_file and zip_file:
     if st.button("PDFを作成する"):
         buf = io.BytesIO()
         c = canvas.Canvas(buf, pagesize=landscape(A4))
-        width, height = landscape(A4)
+        width, height = landscape(A4) # A4横のサイズを取得
+
+        # 用紙の80%のサイズを計算
+        draw_width = width * 0.8
+        draw_height = height * 0.8
+        
+        # 中央に配置するための余白を計算
+        margin_x = (width - draw_width) / 2
+        margin_y = (height - draw_height) / 2
 
         for word in words:
             # --- 表面 (英単語) ---
-            c.setFont(target_font, 100)
-            c.drawCentredString(width / 2, height / 2, str(word))
+            # 文字サイズを用紙の高さの約40%（巨大！）に設定
+            c.setFont(target_font, height * 0.4)
+            c.drawCentredString(width / 2, (height / 2) - (height * 0.1), str(word))
             c.showPage()
 
             # --- 裏面 (画像) ---
@@ -65,8 +71,9 @@ if csv_file and zip_file:
                 img_data = z.read(found_file)
                 img_io = io.BytesIO(img_data)
                 img = Image.open(img_io)
-                # 画像を中央に描画
-                c.drawInlineImage(img, (width-400)/2, (height-400)/2, width=400, height=400, preserveAspectRatio=True)
+                
+                # 画像を用紙の80%の範囲に収まるように描画
+                c.drawInlineImage(img, margin_x, margin_y, width=draw_width, height=draw_height, preserveAspectRatio=True)
             else:
                 c.setFont(target_font, 50)
                 c.drawCentredString(width / 2, height / 2, f"Not Found: {word}")
@@ -75,10 +82,10 @@ if csv_file and zip_file:
 
         c.save()
         
-        st.success("Comic Sans版のPDFが完成しました！")
+        st.success("80%サイズ調整版が完成しました！")
         st.download_button(
             label="完成したPDFを保存",
             data=buf.getvalue(),
-            file_name="English_Cards_Comic.pdf",
+            file_name="English_Cards_80percent.pdf",
             mime="application/pdf"
         )
