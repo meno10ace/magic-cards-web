@@ -5,88 +5,109 @@ from reportlab.lib.pagesizes import A4, landscape
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfbase.pdfmetrics import stringWidth
+from pptx import Presentation
+from pptx.util import Inches, Pt
+from pptx.enum.text import PP_ALIGN
 import io
 import zipfile
 import os
 from PIL import Image
 
-st.title("🎨 手作り英単語カードメーカー")
+st.title("🎨 手作り英単語カードメーカー (PDF & PPTX)")
 
 # --- フォントの設定 ---
 font_path = "comicbd.ttf" 
-
 if os.path.exists(font_path):
     pdfmetrics.registerFont(TTFont('ComicSans', font_path))
     target_font = 'ComicSans'
+    pptx_font_name = 'Comic Sans MS'
 else:
     target_font = 'Helvetica-Bold'
-    st.warning(f"⚠️ {font_path} が見つかりません。標準フォントで作成します。")
+    pptx_font_name = 'Arial'
+    st.warning(f"⚠️ {font_path} が見つかりません。標準フォントを使用します。")
 
+# --- 設定エリア ---
 col1, col2 = st.columns(2)
 with col1:
     csv_file = st.file_uploader("1. 単語リスト(CSV)", type=['csv'])
 with col2:
     zip_file = st.file_uploader("2. 画像まとめ(ZIP)", type=['zip'])
 
+output_type = st.radio("3. 出力形式を選択", ["PDF", "PowerPoint (PPTX)"])
+
 if csv_file and zip_file:
     df = pd.read_csv(csv_file, header=None)
-    words = df[0].tolist()
-    
+    words = [str(w) for w in df[0].tolist()]
     z = zipfile.ZipFile(zip_file)
     file_list = z.namelist()
 
-    if st.button("PDFを作成する"):
+    if st.button(f"{output_type} を作成する"):
         buf = io.BytesIO()
-        c = canvas.Canvas(buf, pagesize=landscape(A4))
-        width, height = landscape(A4)
+        
+        # --- PDF出力の場合 ---
+        if output_type == "PDF":
+            c = canvas.Canvas(buf, pagesize=landscape(A4))
+            width, height = landscape(A4)
+            for word in words:
+                # 表面：文字 (自動リサイズ)
+                max_f = height * 0.4
+                curr_f = max_f
+                while curr_f > 10:
+                    if stringWidth(word, target_font, curr_f) <= width * 0.9: break
+                    curr_f -= 5
+                c.setFont(target_font, curr_f)
+                c.drawCentredString(width / 2, (height / 2) - (curr_f / 3), word)
+                c.showPage()
+                # 裏面：画像 (余白なし)
+                found = None
+                for ext in ['.jpg', '.jpeg', '.png', '.JPG', '.PNG']:
+                    target = f"{word}{ext}"
+                    for f in file_list:
+                        if f.endswith(f"/{target}") or f == target:
+                            found = f; break
+                    if found: break
+                if found:
+                    img = Image.open(io.BytesIO(z.read(found)))
+                    c.drawInlineImage(img, 0, 0, width=width, height=height, preserveAspectRatio=False)
+                else:
+                    c.setFont(target_font, 50)
+                    c.drawCentredString(width / 2, height / 2, f"Not Found: {word}")
+                c.showPage()
+            c.save()
+            file_ext, mime = "pdf", "application/pdf"
 
-        # 描画可能エリアの計算 (用紙の80%)
-        limit_w = width * 0.8
-        limit_h = height * 0.8
-        margin_x = (width - limit_w) / 2
-        margin_y = (height - limit_h) / 2
+        # --- PowerPoint出力の場合 ---
+        else:
+            prs = Presentation()
+            # スライドサイズをA4横に設定
+            prs.slide_width, prs.slide_height = Inches(11.69), Inches(8.27)
+            for word in words:
+                # 表面スライド：文字
+                slide = prs.slides.add_slide(prs.slide_layouts[6])
+                txBox = slide.shapes.add_textbox(0, 0, prs.slide_width, prs.slide_height)
+                tf = txBox.text_frame
+                tf.vertical_anchor = 'middle'
+                p = tf.paragraphs[0]
+                p.text = word
+                p.alignment = PP_ALIGN.CENTER
+                # 文字サイズ調整 (簡易版)
+                font_size = 150 if len(word) < 6 else 100
+                p.font.size, p.font.name, p.font.bold = Pt(font_size), pptx_font_name, True
+                
+                # 裏面スライド：画像 (全画面)
+                slide = prs.slides.add_slide(prs.slide_layouts[6])
+                found = None
+                for ext in ['.jpg', '.jpeg', '.png', '.JPG', '.PNG']:
+                    target = f"{word}{ext}"
+                    for f in file_list:
+                        if f.endswith(f"/{target}") or f == target:
+                            found = f; break
+                    if found: break
+                if found:
+                    img_data = io.BytesIO(z.read(found))
+                    slide.shapes.add_picture(img_data, 0, 0, width=prs.slide_width, height=prs.slide_height)
+            prs.save(buf)
+            file_ext, mime = "pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"
 
-        for word in words:
-            word_str = str(word)
-            # --- 表面 (英単語) ---
-            # 文字サイズを自動調整
-            max_font_size = height * 0.4 # 最大サイズ
-            current_font_size = max_font_size
-            
-            # 横幅が 80% 枠に収まるまでフォントを小さくする
-            while current_font_size > 10:
-                text_width = stringWidth(word_str, target_font, current_font_size)
-                if text_width <= limit_w:
-                    break
-                current_font_size -= 5
-            
-            c.setFont(target_font, current_font_size)
-            # 上下の位置も中央に来るように少し調整
-            c.drawCentredString(width / 2, (height / 2) - (current_font_size / 3), word_str)
-            c.showPage()
-
-            # --- 裏面 (画像) ---
-            found_file = None
-            extensions = ['.jpg', '.jpeg', '.png', '.JPG', '.JPEG', '.PNG']
-            for ext in extensions:
-                target_name = f"{word}{ext}"
-                for f in file_list:
-                    if f.endswith(f"/{target_name}") or f == target_name:
-                        found_file = f
-                        break
-                if found_file: break
-            
-            if found_file:
-                img_data = z.read(found_file)
-                img_io = io.BytesIO(img_data)
-                img = Image.open(img_io)
-                c.drawInlineImage(img, margin_x, margin_y, width=limit_w, height=limit_h, preserveAspectRatio=True)
-            else:
-                c.setFont(target_font, 50)
-                c.drawCentredString(width / 2, height / 2, f"Not Found: {word}")
-            
-            c.showPage()
-
-        c.save()
-        st.success("文字サイズ自動調整版が完成しました！")
-        st.download_button(label="完成したPDFを保存", data=buf.getvalue(), file_name="English_Cards_AutoFit.pdf", mime="application/pdf")
+        st.success(f"{output_type} が完成しました！")
+        st.download_button(label="ファイルを保存", data=buf.getvalue(), file_name=f"English_Cards.{file_ext}", mime=mime)
