@@ -4,6 +4,7 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.pdfbase.pdfmetrics import stringWidth
 import io
 import zipfile
 import os
@@ -37,43 +38,49 @@ if csv_file and zip_file:
     if st.button("PDFを作成する"):
         buf = io.BytesIO()
         c = canvas.Canvas(buf, pagesize=landscape(A4))
-        width, height = landscape(A4) # A4横のサイズを取得
+        width, height = landscape(A4)
 
-        # 用紙の80%のサイズを計算
-        draw_width = width * 0.8
-        draw_height = height * 0.8
-        
-        # 中央に配置するための余白を計算
-        margin_x = (width - draw_width) / 2
-        margin_y = (height - draw_height) / 2
+        # 描画可能エリアの計算 (用紙の80%)
+        limit_w = width * 0.8
+        limit_h = height * 0.8
+        margin_x = (width - limit_w) / 2
+        margin_y = (height - limit_h) / 2
 
         for word in words:
+            word_str = str(word)
             # --- 表面 (英単語) ---
-            # 文字サイズを用紙の高さの約40%（巨大！）に設定
-            c.setFont(target_font, height * 0.4)
-            c.drawCentredString(width / 2, (height / 2) - (height * 0.1), str(word))
+            # 文字サイズを自動調整
+            max_font_size = height * 0.4 # 最大サイズ
+            current_font_size = max_font_size
+            
+            # 横幅が 80% 枠に収まるまでフォントを小さくする
+            while current_font_size > 10:
+                text_width = stringWidth(word_str, target_font, current_font_size)
+                if text_width <= limit_w:
+                    break
+                current_font_size -= 5
+            
+            c.setFont(target_font, current_font_size)
+            # 上下の位置も中央に来るように少し調整
+            c.drawCentredString(width / 2, (height / 2) - (current_font_size / 3), word_str)
             c.showPage()
 
             # --- 裏面 (画像) ---
             found_file = None
             extensions = ['.jpg', '.jpeg', '.png', '.JPG', '.JPEG', '.PNG']
-            
             for ext in extensions:
                 target_name = f"{word}{ext}"
                 for f in file_list:
                     if f.endswith(f"/{target_name}") or f == target_name:
                         found_file = f
                         break
-                if found_file:
-                    break
+                if found_file: break
             
             if found_file:
                 img_data = z.read(found_file)
                 img_io = io.BytesIO(img_data)
                 img = Image.open(img_io)
-                
-                # 画像を用紙の80%の範囲に収まるように描画
-                c.drawInlineImage(img, margin_x, margin_y, width=draw_width, height=draw_height, preserveAspectRatio=True)
+                c.drawInlineImage(img, margin_x, margin_y, width=limit_w, height=limit_h, preserveAspectRatio=True)
             else:
                 c.setFont(target_font, 50)
                 c.drawCentredString(width / 2, height / 2, f"Not Found: {word}")
@@ -81,11 +88,5 @@ if csv_file and zip_file:
             c.showPage()
 
         c.save()
-        
-        st.success("80%サイズ調整版が完成しました！")
-        st.download_button(
-            label="完成したPDFを保存",
-            data=buf.getvalue(),
-            file_name="English_Cards_80percent.pdf",
-            mime="application/pdf"
-        )
+        st.success("文字サイズ自動調整版が完成しました！")
+        st.download_button(label="完成したPDFを保存", data=buf.getvalue(), file_name="English_Cards_AutoFit.pdf", mime="application/pdf")
