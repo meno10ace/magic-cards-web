@@ -3,7 +3,7 @@ import pandas as pd
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont # フォント登録用の道具
+from reportlab.pdfbase.ttfonts import TTFont
 import io
 import zipfile
 import os
@@ -11,14 +11,18 @@ from PIL import Image
 
 st.title("🎨 手作り英単語カードメーカー")
 
-# --- フォントの登録 ---
-# GitHubにアップした comicbd.ttf を読み込む
-font_path = "comicbd.ttf"
+# --- フォントの設定 ---
+# GitHubにアップロードするファイル名と一致させています
+font_path = "comicbd.ttf" 
+
 if os.path.exists(font_path):
-    pdfmetrics.registerFont(TTFont('ComicSans-Bold', font_path))
-    target_font = 'ComicSans-Bold'
+    # フォントを 'ComicSans' という名前で登録
+    pdfmetrics.registerFont(TTFont('ComicSans', font_path))
+    target_font = 'ComicSans'
 else:
-    target_font = 'Helvetica-Bold' # ファイルがない時の予備
+    # ファイルが見つからない場合は標準のHelveticaを使用
+    target_font = 'Helvetica-Bold'
+    st.warning(f"⚠️ {font_path} が見つかりません。標準フォントで作成します。")
 
 col1, col2 = st.columns(2)
 with col1:
@@ -40,7 +44,7 @@ if csv_file and zip_file:
 
         for word in words:
             # --- 表面 (英単語) ---
-            c.setFont(target_font, 100) # ここでComic Sansを指定
+            c.setFont(target_font, 100)
             c.drawCentredString(width / 2, height / 2, str(word))
             c.showPage()
 
@@ -61,6 +65,7 @@ if csv_file and zip_file:
                 img_data = z.read(found_file)
                 img_io = io.BytesIO(img_data)
                 img = Image.open(img_io)
+                # 画像を中央に描画
                 c.drawInlineImage(img, (width-400)/2, (height-400)/2, width=400, height=400, preserveAspectRatio=True)
             else:
                 c.setFont(target_font, 50)
@@ -69,5 +74,11 @@ if csv_file and zip_file:
             c.showPage()
 
         c.save()
-        st.success("Comic Sans版PDFが完成しました！")
-        st.download_button(label="PDFを保存", data=buf.getvalue(), file_name="English_Cards_ComicSans.pdf", mime="application/pdf")
+        
+        st.success("Comic Sans版のPDFが完成しました！")
+        st.download_button(
+            label="完成したPDFを保存",
+            data=buf.getvalue(),
+            file_name="English_Cards_Comic.pdf",
+            mime="application/pdf"
+        )
