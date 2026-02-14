@@ -7,7 +7,7 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from pptx import Presentation
 from pptx.util import Inches, Pt
-from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
+from pptx.enum.text import PP_ALIGN
 import io
 import zipfile
 import os
@@ -69,26 +69,31 @@ if csv_file and zip_file:
             file_ext, mime = "pdf", "application/pdf"
 
         else: 
-            # PowerPoint出力 (2010互換重視)
-            prs = Presentation()
-            # 4:3 の標準サイズ（10x7.5インチ）が古いパワポでは最も安定します
-            prs.slide_width = Inches(10)
-            prs.slide_height = Inches(7.5)
+            # --- PowerPoint 2010 徹底対策版 ---
+            prs = Presentation() # スライドサイズ設定を削除（デフォルトの4:3を使用）
             
             for word in words:
-                # 表面：文字 (スライドレイアウト 6 = 空白)
-                slide = prs.slides.add_slide(prs.slide_layouts[6])
-                txBox = slide.shapes.add_textbox(0, 0, prs.slide_width, prs.slide_height)
-                tf = txBox.text_frame
-                tf.word_wrap = True
-                p = tf.paragraphs[0]
-                p.text = word
-                p.alignment = PP_ALIGN.CENTER
-                font_size = 120 if len(word) < 6 else 80
-                p.font.size, p.font.name, p.font.bold = Pt(font_size), pptx_font_name, True
+                # 表面：文字
+                # レイアウト0（タイトルスライド）が最も安定します
+                slide = prs.slides.add_slide(prs.slide_layouts[0])
+                # 標準のタイトル枠を使用
+                title = slide.shapes.title
+                title.text = word
+                # フォント設定
+                for paragraph in title.text_frame.paragraphs:
+                    paragraph.alignment = PP_ALIGN.CENTER
+                    for run in paragraph.runs:
+                        run.font.size = Pt(80)
+                        run.font.name = pptx_font_name
+                        run.font.bold = True
+                # 副題（Subtitle）があれば削除してエラーを回避
+                for shape in slide.placeholders:
+                    if shape.placeholder_format.idx == 1:
+                        sp = shape.element
+                        sp.getparent().remove(sp)
                 
                 # 裏面：画像
-                slide = prs.slides.add_slide(prs.slide_layouts[6])
+                slide = prs.slides.add_slide(prs.slide_layouts[6]) # 空白スライド
                 found = None
                 for ext in ['.jpg', '.jpeg', '.png', '.JPG', '.PNG']:
                     target = f"{word}{ext}"
@@ -98,11 +103,11 @@ if csv_file and zip_file:
                     if found: break
                 if found:
                     img_data = io.BytesIO(z.read(found))
-                    # 余白なしで配置
-                    slide.shapes.add_picture(img_data, 0, 0, width=prs.slide_width, height=prs.slide_height)
+                    # サイズ指定を「スライドいっぱい」ではなく、少し余裕を持たせる
+                    slide.shapes.add_picture(img_data, 0, 0, width=prs.slide_width)
             
             prs.save(buf)
             file_ext, mime = "pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"
 
         st.success(f"{output_type} が完成しました！")
-        st.download_button(label="ファイルを保存", data=buf.getvalue(), file_name=f"English_Cards.{file_ext}", mime=mime)
+        st.download_button(label="保存して2010で試す", data=buf.getvalue(), file_name=f"English_Cards_2010.{file_ext}", mime=mime)
