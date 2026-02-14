@@ -29,12 +29,12 @@ if csv_file and zip_file:
         for word in words:
             # --- 表面 (英単語) ---
             c.setFont("Helvetica-Bold", 100)
-            c.drawCentredString(width / 2, height / 2, word)
+            c.drawCentredString(width / 2, height / 2, str(word))
             c.showPage()
 
             # --- 裏面 (画像) ---
             found_file = None
-            extensions = ['.jpg', '.jpeg', '.png', '.JPG', '.PNG']
+            extensions = ['.jpg', '.jpeg', '.png', '.JPG', '.JPEG', '.PNG']
             
             for ext in extensions:
                 target_name = f"{word}{ext}"
@@ -46,9 +46,13 @@ if csv_file and zip_file:
                     break
             
             if found_file:
+                # 画像データを読み込んで一度PILで開き、ReportLabに渡す
                 img_data = z.read(found_file)
                 img_io = io.BytesIO(img_data)
-                c.drawImage(Image.open(img_io), (width-400)/2, (height-400)/2, width=400, height=400, preserveAspectRatio=True)
+                img = Image.open(img_io)
+                
+                # 画像を一時保存せずに直接描画
+                c.drawInlineImage(img, (width-400)/2, (height-400)/2, width=400, height=400, preserveAspectRatio=True)
             else:
                 c.setFont("Helvetica-Bold", 50)
                 c.drawCentredString(width / 2, height / 2, f"Not Found: {word}")
