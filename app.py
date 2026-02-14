@@ -7,13 +7,13 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from pptx import Presentation
 from pptx.util import Inches, Pt
-from pptx.enum.text import PP_ALIGN, MSO_ANCHOR # 修正：MSO_ANCHORを追加
+from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
 import io
 import zipfile
 import os
 from PIL import Image
 
-st.title("🎨 手作り英単語カードメーカー (PDF & PPTX)")
+st.title("🎨 手作り英単語カードメーカー")
 
 # --- フォントの設定 ---
 font_path = "comicbd.ttf" 
@@ -24,7 +24,6 @@ if os.path.exists(font_path):
 else:
     target_font = 'Helvetica-Bold'
     pptx_font_name = 'Arial'
-    st.warning(f"⚠️ {font_path} が見つかりません。標準フォントを使用します。")
 
 col1, col2 = st.columns(2)
 with col1:
@@ -47,7 +46,6 @@ if csv_file and zip_file:
             c = canvas.Canvas(buf, pagesize=landscape(A4))
             width, height = landscape(A4)
             for word in words:
-                # 表面：文字 (自動リサイズ)
                 max_f = height * 0.4
                 curr_f = max_f
                 while curr_f > 10:
@@ -56,7 +54,6 @@ if csv_file and zip_file:
                 c.setFont(target_font, curr_f)
                 c.drawCentredString(width / 2, (height / 2) - (curr_f / 3), word)
                 c.showPage()
-                # 裏面：画像 (余白なし・全画面)
                 found = None
                 for ext in ['.jpg', '.jpeg', '.png', '.JPG', '.PNG']:
                     target = f"{word}{ext}"
@@ -66,31 +63,31 @@ if csv_file and zip_file:
                     if found: break
                 if found:
                     img = Image.open(io.BytesIO(z.read(found)))
-                    # preserveAspectRatio=False で用紙いっぱいに引き伸ばし
                     c.drawInlineImage(img, 0, 0, width=width, height=height, preserveAspectRatio=False)
-                else:
-                    c.setFont(target_font, 50)
-                    c.drawCentredString(width / 2, height / 2, f"Not Found: {word}")
                 c.showPage()
             c.save()
             file_ext, mime = "pdf", "application/pdf"
 
-        else: # PowerPoint出力
+        else: 
+            # PowerPoint出力 (2010互換重視)
             prs = Presentation()
-            prs.slide_width, prs.slide_height = Inches(11.69), Inches(8.27)
+            # 4:3 の標準サイズ（10x7.5インチ）が古いパワポでは最も安定します
+            prs.slide_width = Inches(10)
+            prs.slide_height = Inches(7.5)
+            
             for word in words:
-                # 表面：文字
+                # 表面：文字 (スライドレイアウト 6 = 空白)
                 slide = prs.slides.add_slide(prs.slide_layouts[6])
                 txBox = slide.shapes.add_textbox(0, 0, prs.slide_width, prs.slide_height)
                 tf = txBox.text_frame
-                tf.vertical_anchor = MSO_ANCHOR.MIDDLE # 修正：正しい設定値に変更
+                tf.word_wrap = True
                 p = tf.paragraphs[0]
                 p.text = word
                 p.alignment = PP_ALIGN.CENTER
-                font_size = 150 if len(word) < 6 else 100
+                font_size = 120 if len(word) < 6 else 80
                 p.font.size, p.font.name, p.font.bold = Pt(font_size), pptx_font_name, True
                 
-                # 裏面：画像 (全画面)
+                # 裏面：画像
                 slide = prs.slides.add_slide(prs.slide_layouts[6])
                 found = None
                 for ext in ['.jpg', '.jpeg', '.png', '.JPG', '.PNG']:
@@ -101,8 +98,9 @@ if csv_file and zip_file:
                     if found: break
                 if found:
                     img_data = io.BytesIO(z.read(found))
-                    # スライドの端から端まで画像を配置
+                    # 余白なしで配置
                     slide.shapes.add_picture(img_data, 0, 0, width=prs.slide_width, height=prs.slide_height)
+            
             prs.save(buf)
             file_ext, mime = "pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"
 
