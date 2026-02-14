@@ -2,11 +2,23 @@ import streamlit as st
 import pandas as pd
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4, landscape
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont # フォント登録用の道具
 import io
 import zipfile
+import os
 from PIL import Image
 
 st.title("🎨 手作り英単語カードメーカー")
+
+# --- フォントの登録 ---
+# GitHubにアップした comicbd.ttf を読み込む
+font_path = "comicbd.ttf"
+if os.path.exists(font_path):
+    pdfmetrics.registerFont(TTFont('ComicSans-Bold', font_path))
+    target_font = 'ComicSans-Bold'
+else:
+    target_font = 'Helvetica-Bold' # ファイルがない時の予備
 
 col1, col2 = st.columns(2)
 with col1:
@@ -28,7 +40,7 @@ if csv_file and zip_file:
 
         for word in words:
             # --- 表面 (英単語) ---
-            c.setFont("Helvetica-Bold", 100)
+            c.setFont(target_font, 100) # ここでComic Sansを指定
             c.drawCentredString(width / 2, height / 2, str(word))
             c.showPage()
 
@@ -46,25 +58,16 @@ if csv_file and zip_file:
                     break
             
             if found_file:
-                # 画像データを読み込んで一度PILで開き、ReportLabに渡す
                 img_data = z.read(found_file)
                 img_io = io.BytesIO(img_data)
                 img = Image.open(img_io)
-                
-                # 画像を一時保存せずに直接描画
                 c.drawInlineImage(img, (width-400)/2, (height-400)/2, width=400, height=400, preserveAspectRatio=True)
             else:
-                c.setFont("Helvetica-Bold", 50)
+                c.setFont(target_font, 50)
                 c.drawCentredString(width / 2, height / 2, f"Not Found: {word}")
             
             c.showPage()
 
         c.save()
-        
-        st.success("画像付きPDFが完成しました！")
-        st.download_button(
-            label="完成したPDFを保存",
-            data=buf.getvalue(),
-            file_name="English_Cards.pdf",
-            mime="application/pdf"
-        )
+        st.success("Comic Sans版PDFが完成しました！")
+        st.download_button(label="PDFを保存", data=buf.getvalue(), file_name="English_Cards_ComicSans.pdf", mime="application/pdf")
